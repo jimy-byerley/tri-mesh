@@ -275,6 +275,76 @@ impl Shape {
 		self
  	}
  	
+ 	pub fn join_lines_shortest(&mut self, line1: &[Vec3], line2: &[Vec3], method: &mut impl JunctionMethod) {
+		let mut last1 = 0;
+		let mut last2 = 0;
+		while last1 < line1.len() || last1 < line2.len() {
+			let next1 = if last1 < line1.len()  {last1+1} else {last1};
+			let next2 = if last2 < line2.len()  {last2+1} else {last2};
+			
+			let dnext = (line1[next1] - line2[next2]).magnitude();
+			let dlast1 = (line1[last1] - line2[next2]).magnitude();
+			let dlast2 = (line1[next1] - line2[last2]).magnitude();
+			if dnext < dlast1 && dnext < dlast2 {
+				method.quad(self, [last1 as u32, last2 as u32, next2 as u32, last2 as u32]);
+				last1 = next1;
+				last2 = next2;
+			}
+			else if dlast1 < dlast2 {
+				method.triangle(self, [last1 as u32, last2 as u32, next2 as u32]);
+				last2 = next2;
+			}
+			else if dlast2 < dlast1 {
+				method.triangle(self, [last1 as u32, last2 as u32, next1 as u32]);
+				last1 = next1;
+			}
+			else {
+				panic!(format!("unable to determine the shortest between distances {} {} {}", dnext, dlast1, dlast2));
+			}
+		}
+ 	}
+ 	 	
+ 	pub fn join_lines_absciss(&mut self, line1: &[Vec3], line2: &[Vec3], method: &mut impl JunctionMethod) {
+		let length1: f64 = line1.windows(2).map(|w| (w[0]-w[1]).magnitude()).sum();
+		let length2: f64 = line2.windows(2).map(|w| (w[0]-w[1]).magnitude()).sum();
+		let mut last1 = 0;
+		let mut last2 = 0;
+		let mut absc1 = 0.;
+		let mut absc2 = 0.;
+		while last1 < line1.len() || last1 < line2.len() {
+			let next1 = if last1 < line1.len()  {last1+1} else {last1};
+			let next2 = if last2 < line2.len()  {last2+1} else {last2};
+			
+			let d1 = absc1 + (line1[last1] - line1[next1]).magnitude() / length1;
+			let d2 = absc2 + (line2[last2] - line2[next2]).magnitude() / length2;
+			if d1 < absc2 {
+				method.triangle(self, [last1 as u32, last2 as u32, next1 as u32]);
+				last1 = next1;
+				absc1 = d1;
+			}
+			else if d2 < absc1 {
+				method.triangle(self, [last1 as u32, last2 as u32, next2 as u32]);
+				last2 = next2;
+				absc2 = d2;
+			}
+			else {
+				method.quad(self, [last1 as u32, last2 as u32, next2 as u32, last2 as u32]);
+				last1 = next1;
+				last2 = next2;
+				absc1 = d1;
+				absc2 = d2;
+			}
+		}
+ 	}
+ 	
+ 	fn create_tri(&mut self, pts: [u32; 3])	{ 
+		self.faces.push(pts); 
+	}
+ 	fn create_quad(&mut self, pts: [u32; 4]) { 
+		self.faces.push([pts[0], pts[1], pts[2]]); 
+		self.faces.push([pts[2], pts[3], pts[0]]); 
+	}
+ 	
  	pub fn is_valid(&self) -> bool {
 		// TODO use an error as return value
 		let maxindex = self.points.len() as u32;
@@ -287,6 +357,85 @@ impl Shape {
  	}
 }
 
+
+
+pub trait JunctionMethod {
+	fn triangle(&mut self, shape: &mut Shape, pts: [u32; 3]);
+	fn quad(&mut self, shape: &mut Shape, pts: [u32; 4]);
+}
+
+pub struct JunctionSimple {}
+impl JunctionMethod for JunctionSimple {
+	fn triangle(&mut self, shape: &mut Shape, pts: [u32; 3]) 	{ shape.create_tri(pts); }
+	fn quad(&mut self, shape: &mut Shape, pts: [u32; 4]) 	{ shape.create_quad(pts); }
+}
+
+
+pub struct JunctionSmooth {
+	segments: u32,
+	lastedge: Option<u32>,
+}
+impl JunctionSmooth {
+	pub fn new(segments: u32) -> Self {
+		Self {segments: segments, lastedge: None}
+	}
+	
+	/// return a list of the points indices 
+	fn create_edge(&self, shape: &mut Shape, a: u32, b: u32) -> u32 {
+		let startindex = shape.points.len() as u32;
+		let start = shape.points[a as usize];
+		let end = shape.points[b as usize];
+		for i in 1 .. self.segments {
+			let f = (i as f64)/(self.segments as f64);
+			shape.points.push((f*start + (1.-f) * end));
+		}
+		startindex
+	}
+}
+impl JunctionMethod for JunctionSmooth {
+	fn triangle(&mut self, shape: &mut Shape, pts: [u32; 3]) {
+		let edge1 = self.lastedge.unwrap_or_else(|| self.create_edge(shape, pts[0], pts[1]));
+		let edge2 = self.create_edge(shape, pts[0], pts[2]);
+		self.lastedge = Some(edge2);
+		
+		if self.segments > 0 {
+			shape.create_tri([pts[0], edge1, edge2]);
+			for i in 0 .. self.segments-1 {
+				shape.create_quad([edge1+i, edge1+i+1, edge2+i+1, edge2+i]);
+			}
+			shape.create_quad([edge1+self.segments-1, pts[1], pts[2], edge2+self.segments-1]);
+		}
+		else {
+			shape.create_tri(pts);
+		}
+	}
+	
+	fn quad(&mut self, shape: &mut Shape, pts: [u32; 4]) {
+		let edge1 = self.lastedge.unwrap_or_else(|| self.create_edge(shape, pts[0], pts[1]));
+		let edge2 = self.create_edge(shape, pts[3], pts[2]);
+		self.lastedge = Some(edge2);
+		
+		if self.segments > 0 {
+			shape.create_quad([pts[0], edge1, edge2, pts[3]]);
+			for i in 0 .. self.segments-1 {
+				shape.create_quad([edge1+i, edge1+i+1, edge2+i+1, edge2+i]);
+			}
+			shape.create_quad([edge1+self.segments-1, pts[1], pts[2], edge2+self.segments-1]);
+		}
+		else {
+			shape.create_quad(pts);
+		}
+	}
+}
+
+
+/*
+pub struct JunctionSmoothNormal {
+	segments: usize,
+	lastedge: Option<usize>,,
+	normals: HashMap<u32, Vec3>,
+}
+*/
 
 fn base_from_points(points: &mut dyn Iterator<Item=Vec3>) -> (Vec3, Vec3, Vec3) {
 	let err = "not enough vectors to cet a base, needs 3 differents";

@@ -153,7 +153,7 @@ impl Shape {
 					j += 1;
 				}	
 			}
-			self.face.truncate(j);
+			self.faces.truncate(j);
 		}
 		self
 	}
@@ -317,8 +317,8 @@ impl Shape {
  	 	
  	pub fn join_lines_absciss<J: JunctionMethod>(&mut self, line1: &[u32], line2: &[u32], mut method: J) {
 		method.start(self, [0, 0]);
-		let length1: f64 = line1.windows(2).map(|w| (w[0]-w[1]).magnitude()).sum();
-		let length2: f64 = line2.windows(2).map(|w| (w[0]-w[1]).magnitude()).sum();
+		let length1: f64 = line1.windows(2).map(|w| (self.points[w[0] as usize] - self.points[w[1] as usize]).magnitude()).sum();
+		let length2: f64 = line2.windows(2).map(|w| (self.points[w[0] as usize] - self.points[w[1] as usize]).magnitude()).sum();
 		let mut last1 = 0;
 		let mut last2 = 0;
 		let mut absc1 = 0.;
@@ -327,8 +327,8 @@ impl Shape {
 			let next1 = if last1 < line1.len()  {last1+1} else {last1};
 			let next2 = if last2 < line2.len()  {last2+1} else {last2};
 			
-			let d1 = absc1 + (line1[last1] - line1[next1]).magnitude() / length1;
-			let d2 = absc2 + (line2[last2] - line2[next2]).magnitude() / length2;
+			let d1 = absc1 + (self.points[line1[last1] as usize] - self.points[line1[next1] as usize]).magnitude() / length1;
+			let d2 = absc2 + (self.points[line2[last2] as usize] - self.points[line2[next2] as usize]).magnitude() / length2;
 			if d1 < absc2 {
 				method.avance(self, [line1[next1], line2[last2]]);
 				last1 = next1;

@@ -328,7 +328,7 @@ impl Shape {
  	}
  	/// same as junction_shortest but takes already existing points
  	pub fn join_shortest<J: JunctionMethod>(&mut self, line1: &[u32], line2: &[u32], mut method: J) -> &mut Self {
-		method.start(self, [0, 0]);
+		method.start(self, [line1[0], line2[0]]);
 		let mut last1 = 0;
 		let mut last2 = 0;
 		while last1 < line1.len()-1 || last1 < line2.len()-1 {
@@ -344,11 +344,11 @@ impl Shape {
 				last2 = next2;
 			}
 			else if dlast1 < dlast2 {
-				method.avance(self, [line1[last1], line2[next2]]);
+				method.avance(self, [line1[next1], line2[last2]]);
 				last2 = next2;
 			}
 			else if dlast2 < dlast1 {
-				method.avance(self, [line1[next1], line2[last2]]);
+				method.avance(self, [line1[last1], line2[next2]]);
 				last1 = next1;
 			}
 			else {
@@ -373,7 +373,7 @@ impl Shape {
  	}
  	/// same as junction_ratio but takes already existing points
  	pub fn join_ratio<J: JunctionMethod>(&mut self, line1: &[u32], line2: &[u32], mut method: J) -> &mut Self {
-		method.start(self, [0, 0]);
+		method.start(self, [line1[0], line2[0]]);
 		let length1: f64 = line1.windows(2).map(|w| (self.points[w[0] as usize] - self.points[w[1] as usize]).magnitude()).sum();
 		let length2: f64 = line2.windows(2).map(|w| (self.points[w[0] as usize] - self.points[w[1] as usize]).magnitude()).sum();
 		let mut last1 = 0;
@@ -411,8 +411,8 @@ impl Shape {
 		self.faces.push(pts); 
 	}
  	fn create_quad(&mut self, pts: [u32; 4]) { 
-		self.faces.push([pts[0], pts[1], pts[2]]); 
-		self.faces.push([pts[2], pts[3], pts[0]]); 
+		self.faces.push([pts[0], pts[1], pts[3]]); 
+		self.faces.push([pts[2], pts[3], pts[1]]); 
 		// TODO: add quality checks (choose where to place the diagonal)
 	}
  	
@@ -476,8 +476,8 @@ impl JunctionMethod for JunctionSimple {
 	fn avance(&mut self, shape: &mut Shape, pts: [u32; 2]) 	{
 		let ptl = self.lastedge.unwrap();
 		self.lastedge = Some(pts);
-		if      pts[0] == ptl[0]	{ shape.create_tri([pts[0], ptl[1], pts[1]]); }
-		else if pts[1] == ptl[1]	{ shape.create_tri([pts[0], ptl[0], pts[1]]); }
+		if      pts[0] == ptl[0]	{ shape.create_tri([ptl[0], ptl[1], pts[1]]); }
+		else if pts[1] == ptl[1]	{ shape.create_tri([ptl[0], ptl[1], pts[0]]); }
 		else						{ shape.create_quad([ptl[0], ptl[1], pts[1], pts[0]]); }
 	}
 }
@@ -641,13 +641,17 @@ mod tests {
 		{	// test shortest pairing
 			let mut shape = Shape::new();
 			shape.junction_shortest(&line1, &line2, JunctionSimple::new());
+			
 			assert_eq!(6, shape.points.len());
 			assert_eq!(4, shape.faces.len());
 			assert!(shape.is_valid());
+			assert!(shape.is_envelope());
+			
 		}
 		{	// test ratio pairing
 			let mut shape = Shape::new();
 			shape.junction_ratio(&line1, &line2, JunctionSimple::new());
+			
 			assert_eq!(6, shape.points.len());
 			assert_eq!(4, shape.faces.len());
 			assert!(shape.is_valid());

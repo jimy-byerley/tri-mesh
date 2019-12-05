@@ -64,6 +64,13 @@ impl Shape {
 		}
 	}
 	
+	/// get the approximate size of the object (the diagonal of the bounding box)
+	///
+	pub fn size(&self) -> f64 {
+		let b = self.boundingbox().unwrap_or([Vec3::zero(), Vec3::zero()]);
+		(b[1]-b[0]).magnitude()
+	}
+	
 	/// insert an other shape, simply including its points and faces.
 	///
 	pub fn merge(&mut self, other: &Self) -> &mut Self {
@@ -75,7 +82,7 @@ impl Shape {
 	
 	/// Merge points that are too close.
 	///
-	/// if specified, `distance` is the approximate radius in which the points will me considered to be merged.
+	/// if specified, `distance` is the approximate radius in which the points will me considered to be merged, else it is `1e-6 * self.size()`.
 	/// # WANING: `distance` is approximative, points can be merged if they are up to `2*distance`
 	///
 	pub fn merge_doubles(&mut self, distance: Option<f64>) -> &mut Self {
@@ -84,10 +91,7 @@ impl Shape {
 		// get the distance step
 		let step = match distance {
 			Some(distance)	=> distance,
-			None => {
-				let b = self.boundingbox().unwrap();
-				(b[1]-b[0]).magnitude() * 1e-6
-			}
+			None => { self.size() * 1e-6 }
 		};
 		
 		// hashtable of redirections for merge
@@ -126,7 +130,7 @@ impl Shape {
 		self
 	}
 	
-	/// merge some points.
+	/// Merge some points.
 	///
 	/// the argument must be like `{point_to_merge:  point_to_merge_to}`.
 	///
@@ -158,6 +162,8 @@ impl Shape {
 		self
 	}
 	
+	/// Remove points that are not hold by any face
+	///
 	pub fn remove_unused(&mut self) -> &mut Self {
 		let mut usage = vec![false; self.points.len()];
 		for face in self.faces.iter() {
@@ -304,6 +310,9 @@ impl Shape {
 		self
  	}
  	
+ 	/// Create faces between line1 and line2, linking the nearest points together
+ 	/// the method defines how to create the faces.
+ 	///
  	pub fn junction_shortest<J: JunctionMethod>(&mut self, line1: &[Vec3], line2: &[Vec3], method: J) -> &mut Self {
 		let i1 = self.points.len() as u32;
 		self.points.extend_from_slice(line1);
@@ -313,6 +322,7 @@ impl Shape {
 		self.join_shortest(&Vec::from_iter(i1 .. i2), &Vec::from_iter(i2 .. i3), method);
 		self
  	}
+ 	/// same as junction_shortest but takes already existing points
  	pub fn join_shortest<J: JunctionMethod>(&mut self, line1: &[u32], line2: &[u32], mut method: J) -> &mut Self {
 		method.start(self, [0, 0]);
 		let mut last1 = 0;
@@ -345,6 +355,9 @@ impl Shape {
  	}
  	 	
  	 	
+ 	/// Create faces between line1 and line2, linking the points that have the nearest ratio  (curve absciss on line) / (length of line)
+ 	/// the method defines how to create the faces.
+ 	///
  	pub fn junction_ratio<J: JunctionMethod>(&mut self, line1: &[Vec3], line2: &[Vec3], method: J) -> &mut Self {
 		let i1 = self.points.len() as u32;
 		self.points.extend_from_slice(line1);
@@ -354,6 +367,7 @@ impl Shape {
 		self.join_ratio(&Vec::from_iter(i1 .. i2), &Vec::from_iter(i2 .. i3), method);
 		self
  	}
+ 	/// same as junction_ratio but takes already existing points
  	pub fn join_ratio<J: JunctionMethod>(&mut self, line1: &[u32], line2: &[u32], mut method: J) -> &mut Self {
 		method.start(self, [0, 0]);
 		let length1: f64 = line1.windows(2).map(|w| (self.points[w[0] as usize] - self.points[w[1] as usize]).magnitude()).sum();
@@ -426,7 +440,7 @@ pub struct JunctionSimple {
 	lastedge: Option<[u32; 2]>,
 }
 impl JunctionSimple {
-	fn new() -> Self {
+	pub fn new() -> Self {
 		Self {lastedge: None}
 	}
 }

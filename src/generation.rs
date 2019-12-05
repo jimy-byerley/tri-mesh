@@ -158,6 +158,25 @@ impl Shape {
 		self
 	}
 	
+	pub fn remove_unused(&mut self) -> &mut Self {
+		let mut usage = vec![false; self.points.len()];
+		for face in self.faces.iter() {
+			for pt in face.iter() 		{ usage[*pt as usize] = true; }
+		}
+		
+		let mut j = 0;
+		for i in 0 .. self.points.len() {
+			if usage[i]	{
+				self.points[j] = self.points[i];
+				j += 1;
+			}
+		}
+		self.points.truncate(j);
+		
+		self
+	}
+	
+	
 	/// insert a surface defined by its outline.
 	///
 	/// The ouline is considered closed (ie. the last point is connected to the first).
@@ -285,15 +304,16 @@ impl Shape {
 		self
  	}
  	
- 	pub fn junction_shortest<J: JunctionMethod>(&mut self, line1: &[Vec3], line2: &[Vec3], mut method: J) {
+ 	pub fn junction_shortest<J: JunctionMethod>(&mut self, line1: &[Vec3], line2: &[Vec3], mut method: J) -> &mut Self {
 		let i1 = self.points.len() as u32;
 		self.points.extend_from_slice(line1);
 		let i2 = self.points.len() as u32;
 		self.points.extend_from_slice(line2);
 		let i3 = self.points.len() as u32;
 		self.join_shortest(&Vec::from_iter(i1 .. i2), &Vec::from_iter(i2 .. i3), method);
+		self
  	}
- 	pub fn join_shortest<J: JunctionMethod>(&mut self, line1: &[u32], line2: &[u32], mut method: J) {
+ 	pub fn join_shortest<J: JunctionMethod>(&mut self, line1: &[u32], line2: &[u32], mut method: J) -> &mut Self {
 		method.start(self, [0, 0]);
 		let mut last1 = 0;
 		let mut last2 = 0;
@@ -321,18 +341,20 @@ impl Shape {
 				panic!(format!("unable to determine the shortest between distances {} {} {}", dnext, dlast1, dlast2));
 			}
 		}
+		self
  	}
  	 	
  	 	
- 	pub fn junction_ratio<J: JunctionMethod>(&mut self, line1: &[Vec3], line2: &[Vec3], mut method: J) {
+ 	pub fn junction_ratio<J: JunctionMethod>(&mut self, line1: &[Vec3], line2: &[Vec3], mut method: J) -> &mut Self {
 		let i1 = self.points.len() as u32;
 		self.points.extend_from_slice(line1);
 		let i2 = self.points.len() as u32;
 		self.points.extend_from_slice(line2);
 		let i3 = self.points.len() as u32;
 		self.join_ratio(&Vec::from_iter(i1 .. i2), &Vec::from_iter(i2 .. i3), method);
+		self
  	}
- 	pub fn join_ratio<J: JunctionMethod>(&mut self, line1: &[u32], line2: &[u32], mut method: J) {
+ 	pub fn join_ratio<J: JunctionMethod>(&mut self, line1: &[u32], line2: &[u32], mut method: J) -> &mut Self {
 		method.start(self, [0, 0]);
 		let length1: f64 = line1.windows(2).map(|w| (self.points[w[0] as usize] - self.points[w[1] as usize]).magnitude()).sum();
 		let length2: f64 = line2.windows(2).map(|w| (self.points[w[0] as usize] - self.points[w[1] as usize]).magnitude()).sum();
@@ -364,6 +386,7 @@ impl Shape {
 				absc2 = d2;
 			}
 		}
+		self
  	}
  	
  	fn create_tri(&mut self, pts: [u32; 3])	{ 

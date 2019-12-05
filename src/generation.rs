@@ -139,11 +139,14 @@ impl Shape {
 		{
 			let mut j = 0;
 			for i in 0 .. self.points.len() {
-				if ! merges.contains_key(&(i as u32)) 	{
+				if let Some(&dst) = merges.get(&(i as u32)) {
+					reindex.push(dst);
+				}
+				else {
+					reindex.push(j as u32);
 					self.points[j] = self.points[i];
 					j += 1;
 				}
-				reindex.push(j as u32);
 			}
 			self.points.truncate(j);
 		}
@@ -153,7 +156,7 @@ impl Shape {
 				let old = self.faces[i];
 				self.faces[j] = [reindex[old[0] as usize], reindex[old[1] as usize], reindex[old[2] as usize]];
 				let face = self.faces[j];
-				if face[0] != face[1] || face[1] != face[2] || face[0] != face[2] {
+				if face[0] != face[1] && face[1] != face[2] && face[0] != face[2] {
 					j += 1;
 				}	
 			}
@@ -270,9 +273,10 @@ impl Shape {
 			self.points.push(point+displt);
 		}
 		// add the triangles
-		for i in istart+1 .. istart+num {
-			self.faces.push([i-1, i,   i+1]);
-			self.faces.push([i-1, i+1, i+2]);
+		for j in 0 .. num-1 {
+			let i = 2*j + istart;
+			self.faces.push([i,   i+1, i+2]);
+			self.faces.push([i+3, i+2, i+1 ]);
 		}
 		self
 	}
@@ -294,11 +298,11 @@ impl Shape {
 			for pt in line.iter() {
 				self.points.push(transform(amount, *pt));
 			}
-			for i in istart+1 .. istart+num {
-				self.faces.push([i-1, i, i+num]);
-				self.faces.push([i-1, i+num, i+num-1]);
+			for i in istart .. istart+num-1 {
+				self.faces.push([i+num, i,       i+num+1]);
+				self.faces.push([i+1,   i+num+1, i      ]);
 			}
-			istart += line.len() as u32;
+			istart += num;
 		}
 		self
  	}
@@ -422,6 +426,29 @@ impl Shape {
 		}
 		true
  	}
+ 	
+	/// return true if the mesh is an enveloppe  ie each edge is used twice at most, and the normals are consistents
+	pub fn is_envelope(&self) -> bool {
+		let mut edges = HashMap::<(u32,u32),bool>::new();
+		for face in self.faces.iter() {
+			for edge in [(face[0], face[1]), 
+						(face[1], face[2]), 
+						(face[2], face[0])].iter() {
+				// edge already used, or bad normal direction
+				if edges.contains_key(&edge) { return false; }
+				if let Some(mut used) = edges.get_mut(&(edge.1, edge.0)) {
+					// edge already shared
+					if *used        { return false; }
+					*used = true;
+				}
+				else {
+					edges.insert(*edge, false);
+				}
+			}
+		}
+		true
+	}
+       
 }
 
 
@@ -448,6 +475,7 @@ impl JunctionMethod for JunctionSimple {
 	fn start(&mut self, _: &mut Shape, pts: [u32; 2])						{ self.lastedge = Some(pts); }
 	fn avance(&mut self, shape: &mut Shape, pts: [u32; 2]) 	{
 		let ptl = self.lastedge.unwrap();
+		self.lastedge = Some(pts);
 		if      pts[0] == ptl[0]	{ shape.create_tri([pts[0], ptl[1], pts[1]]); }
 		else if pts[1] == ptl[1]	{ shape.create_tri([pts[0], ptl[0], pts[1]]); }
 		else						{ shape.create_quad([ptl[0], ptl[1], pts[1], pts[0]]); }
@@ -546,6 +574,7 @@ mod tests {
 			]);
 		assert_eq!(shape.faces.len(), 3);
 		assert!(shape.is_valid());
+		assert!(shape.is_envelope());
 	}
 	
 	#[test]
@@ -561,6 +590,7 @@ mod tests {
 		assert_eq!(shape.points.len(), 8);
 		assert_eq!(shape.faces.len(), 6);	// there is no face for the non-existing edge (0, 3)
 		assert!(shape.is_valid());
+		assert!(shape.is_envelope());
 	}
 	
 	#[test]
@@ -576,11 +606,12 @@ mod tests {
 		assert_eq!(shape.points.len(), 3*(div+1));
 		assert_eq!(shape.faces.len(), 4*div);
 		assert!(shape.is_valid());
+		assert!(shape.is_envelope());
 	}
 	
 	#[test]
 	fn test_merge_doubles() {
-		let div = 32;
+		let div = 4;
 		let mut shape = Shape::new();
 		shape.revolution(&vec![
 			Vec3::new(1., 0., 0.),
@@ -589,9 +620,10 @@ mod tests {
 			], div, Vec3::new(0., 0., 0.), Vec3::new(0., 0., 1.), 2.*PI);
 		shape.merge_doubles(None);
 		
+		assert!(shape.is_valid());
+		assert!(shape.is_envelope());
 		assert_eq!(shape.points.len(), 3*div);
 		assert_eq!(shape.faces.len(), 4*div);
-		assert!(shape.is_valid());
 	}
 	
 	#[test]
@@ -619,6 +651,7 @@ mod tests {
 			assert_eq!(6, shape.points.len());
 			assert_eq!(4, shape.faces.len());
 			assert!(shape.is_valid());
+			assert!(shape.is_envelope());
 		}
 	}
 	
@@ -646,6 +679,7 @@ mod tests {
 			assert_eq!(3*12, shape.points.len());
 			assert_eq!(4*11, shape.faces.len());
 			assert!(shape.is_valid());
+			assert!(shape.is_envelope());
 		}
 	}
 }

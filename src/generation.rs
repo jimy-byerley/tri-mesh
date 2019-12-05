@@ -285,13 +285,21 @@ impl Shape {
 		self
  	}
  	
- 	pub fn join_lines_shortest<J: JunctionMethod>(&mut self, line1: &[u32], line2: &[u32], mut method: J) {
+ 	pub fn junction_shortest<J: JunctionMethod>(&mut self, line1: &[Vec3], line2: &[Vec3], mut method: J) {
+		let i1 = self.points.len() as u32;
+		self.points.extend_from_slice(line1);
+		let i2 = self.points.len() as u32;
+		self.points.extend_from_slice(line2);
+		let i3 = self.points.len() as u32;
+		self.join_shortest(&Vec::from_iter(i1 .. i2), &Vec::from_iter(i2 .. i3), method);
+ 	}
+ 	pub fn join_shortest<J: JunctionMethod>(&mut self, line1: &[u32], line2: &[u32], mut method: J) {
 		method.start(self, [0, 0]);
 		let mut last1 = 0;
 		let mut last2 = 0;
-		while last1 < line1.len() || last1 < line2.len() {
-			let next1 = if last1 < line1.len()  {last1+1} else {last1};
-			let next2 = if last2 < line2.len()  {last2+1} else {last2};
+		while last1 < line1.len()-1 || last1 < line2.len()-1 {
+			let next1 = if last1 < line1.len()-1  {last1+1} else {last1};
+			let next2 = if last2 < line2.len()-1  {last2+1} else {last2};
 			
 			let dnext = (self.points[line1[next1] as usize] - self.points[line2[next2] as usize]).magnitude();
 			let dlast1 = (self.points[line1[last1] as usize] - self.points[line2[next2] as usize]).magnitude();
@@ -315,7 +323,16 @@ impl Shape {
 		}
  	}
  	 	
- 	pub fn join_lines_absciss<J: JunctionMethod>(&mut self, line1: &[u32], line2: &[u32], mut method: J) {
+ 	 	
+ 	pub fn junction_ratio<J: JunctionMethod>(&mut self, line1: &[Vec3], line2: &[Vec3], mut method: J) {
+		let i1 = self.points.len() as u32;
+		self.points.extend_from_slice(line1);
+		let i2 = self.points.len() as u32;
+		self.points.extend_from_slice(line2);
+		let i3 = self.points.len() as u32;
+		self.join_ratio(&Vec::from_iter(i1 .. i2), &Vec::from_iter(i2 .. i3), method);
+ 	}
+ 	pub fn join_ratio<J: JunctionMethod>(&mut self, line1: &[u32], line2: &[u32], mut method: J) {
 		method.start(self, [0, 0]);
 		let length1: f64 = line1.windows(2).map(|w| (self.points[w[0] as usize] - self.points[w[1] as usize]).magnitude()).sum();
 		let length2: f64 = line2.windows(2).map(|w| (self.points[w[0] as usize] - self.points[w[1] as usize]).magnitude()).sum();
@@ -418,8 +435,8 @@ impl JunctionSmooth {
 		let startindex = shape.points.len() as u32;
 		let start = shape.points[pts[0] as usize];
 		let end = shape.points[pts[1] as usize];
-		for i in 1 .. self.segments {
-			let f = (i as f64)/(self.segments as f64);
+		for i in 0 .. self.segments {
+			let f = ((i+1) as f64)/((self.segments+1) as f64);
 			shape.points.push((f*start + (1.-f) * end));
 		}
 		startindex
@@ -537,6 +554,48 @@ mod tests {
 		
 		assert_eq!(shape.points.len(), 3*div);
 		assert_eq!(shape.faces.len(), 4*div);
+		assert!(shape.is_valid());
+	}
+	
+	#[test]
+	fn test_junction_simple() {
+		let mut shape = Shape::new();
+		shape.junction_shortest(
+			&vec![
+				Vec3::new(1., 0., 0.),
+				Vec3::new(1., 1., 0.),
+				Vec3::new(0., 1., 0.),
+				],
+			&vec![
+				Vec3::new(1., 0., 1.),
+				Vec3::new(1., 1., 1.),
+				Vec3::new(0., 1., 1.),
+				],
+			JunctionSimple::new(),
+			);
+		assert_eq!(6, shape.points.len());
+		assert_eq!(4, shape.faces.len());
+		assert!(shape.is_valid());
+	}
+	
+	#[test]
+	fn test_junction_smooth() {
+		let mut shape = Shape::new();
+		shape.junction_shortest(
+			&vec![
+				Vec3::new(1., 0., 0.),
+				Vec3::new(1., 1., 0.),
+				Vec3::new(0., 1., 0.),
+				],
+			&vec![
+				Vec3::new(1., 0., 1.),
+				Vec3::new(1., 1., 1.),
+				Vec3::new(0., 1., 1.),
+				],
+			JunctionSmooth::new(10),
+			);
+		assert_eq!(3*12, shape.points.len());
+		assert_eq!(4*11, shape.faces.len());
 		assert!(shape.is_valid());
 	}
 }

@@ -326,7 +326,7 @@ impl Shape {
 		self.join_shortest(&Vec::from_iter(i1 .. i2), &Vec::from_iter(i2 .. i3), method);
 		self
  	}
- 	/// same as junction_shortest but takes already existing points
+ 	/// same as [junction_shortest](#method.junction_shortest) but takes already existing points
  	pub fn join_shortest<J: JunctionMethod>(&mut self, line1: &[u32], line2: &[u32], mut method: J) -> &mut Self {
 		method.start(self, [line1[0], line2[0]]);
 		let mut last1 = 0;
@@ -371,7 +371,7 @@ impl Shape {
 		self.join_ratio(&Vec::from_iter(i1 .. i2), &Vec::from_iter(i2 .. i3), method);
 		self
  	}
- 	/// same as junction_ratio but takes already existing points
+ 	/// same as [junction_ratio](#method.junction_ratio) but takes already existing points
  	pub fn join_ratio<J: JunctionMethod>(&mut self, line1: &[u32], line2: &[u32], mut method: J) -> &mut Self {
 		method.start(self, [line1[0], line2[0]]);
 		let length1: f64 = line1.windows(2).map(|w| (self.points[w[0] as usize] - self.points[w[1] as usize]).magnitude()).sum();
@@ -416,6 +416,7 @@ impl Shape {
 		// TODO: add quality checks (choose where to place the diagonal)
 	}
  	
+ 	/// return false if the buffers are inconsistent (faces use non-existing points)
  	pub fn is_valid(&self) -> bool {
 		// TODO use an error as return value
 		let maxindex = self.points.len() as u32;
@@ -453,7 +454,12 @@ impl Shape {
 
 
 
-/// method to create faces between 2 lines
+/// Method to create faces between 2 lines.
+///
+/// ## protocol:
+///  - `start` is called at the beginning of the junction generation, pasing the first linking edge
+///  - `advance` is called several times, each to create the next faces to reach the passed linking edge
+///  - each call to `advance` guarantee that `start` has bee called, and that the new linking edge is connected to the former one by a quad or a triangle.
 pub trait JunctionMethod {
 	/// called to create the first linking edge (pair bt two lines' points)
 	/// the shape passed will then be always the same
@@ -467,6 +473,7 @@ pub struct JunctionSimple {
 	lastedge: Option<[u32; 2]>,
 }
 impl JunctionSimple {
+	/// constructor
 	pub fn new() -> Self {
 		Self {lastedge: None}
 	}

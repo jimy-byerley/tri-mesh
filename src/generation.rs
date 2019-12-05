@@ -304,7 +304,7 @@ impl Shape {
 		self
  	}
  	
- 	pub fn junction_shortest<J: JunctionMethod>(&mut self, line1: &[Vec3], line2: &[Vec3], mut method: J) -> &mut Self {
+ 	pub fn junction_shortest<J: JunctionMethod>(&mut self, line1: &[Vec3], line2: &[Vec3], method: J) -> &mut Self {
 		let i1 = self.points.len() as u32;
 		self.points.extend_from_slice(line1);
 		let i2 = self.points.len() as u32;
@@ -345,7 +345,7 @@ impl Shape {
  	}
  	 	
  	 	
- 	pub fn junction_ratio<J: JunctionMethod>(&mut self, line1: &[Vec3], line2: &[Vec3], mut method: J) -> &mut Self {
+ 	pub fn junction_ratio<J: JunctionMethod>(&mut self, line1: &[Vec3], line2: &[Vec3], method: J) -> &mut Self {
 		let i1 = self.points.len() as u32;
 		self.points.extend_from_slice(line1);
 		let i2 = self.points.len() as u32;
@@ -362,9 +362,9 @@ impl Shape {
 		let mut last2 = 0;
 		let mut absc1 = 0.;
 		let mut absc2 = 0.;
-		while last1 < line1.len() || last1 < line2.len() {
-			let next1 = if last1 < line1.len()  {last1+1} else {last1};
-			let next2 = if last2 < line2.len()  {last2+1} else {last2};
+		while last1 < line1.len()-1 || last1 < line2.len()-1 {
+			let next1 = if last1 < line1.len()-1  {last1+1} else {last1};
+			let next2 = if last2 < line2.len()-1  {last2+1} else {last2};
 			
 			let d1 = absc1 + (self.points[line1[last1] as usize] - self.points[line1[next1] as usize]).magnitude() / length1;
 			let d2 = absc2 + (self.points[line2[last2] as usize] - self.points[line2[next2] as usize]).magnitude() / length2;
@@ -582,43 +582,56 @@ mod tests {
 	
 	#[test]
 	fn test_junction_simple() {
-		let mut shape = Shape::new();
-		shape.junction_shortest(
-			&vec![
+		let line1 = vec![
 				Vec3::new(1., 0., 0.),
 				Vec3::new(1., 1., 0.),
 				Vec3::new(0., 1., 0.),
-				],
-			&vec![
+				];
+		let line2 = vec![
 				Vec3::new(1., 0., 1.),
 				Vec3::new(1., 1., 1.),
 				Vec3::new(0., 1., 1.),
-				],
-			JunctionSimple::new(),
-			);
-		assert_eq!(6, shape.points.len());
-		assert_eq!(4, shape.faces.len());
-		assert!(shape.is_valid());
+				];
+		{	// test shortest pairing
+			let mut shape = Shape::new();
+			shape.junction_shortest(&line1, &line2, JunctionSimple::new());
+			assert_eq!(6, shape.points.len());
+			assert_eq!(4, shape.faces.len());
+			assert!(shape.is_valid());
+		}
+		{	// test ratio pairing
+			let mut shape = Shape::new();
+			shape.junction_ratio(&line1, &line2, JunctionSimple::new());
+			assert_eq!(6, shape.points.len());
+			assert_eq!(4, shape.faces.len());
+			assert!(shape.is_valid());
+		}
 	}
 	
 	#[test]
 	fn test_junction_smooth() {
-		let mut shape = Shape::new();
-		shape.junction_shortest(
-			&vec![
+		let line1 = vec![
 				Vec3::new(1., 0., 0.),
-				Vec3::new(1., 1., 0.),
+				Vec3::new(2., 1., 0.),
 				Vec3::new(0., 1., 0.),
-				],
-			&vec![
+				];
+		let line2 = vec![
 				Vec3::new(1., 0., 1.),
-				Vec3::new(1., 1., 1.),
-				Vec3::new(0., 1., 1.),
-				],
-			JunctionSmooth::new(10),
-			);
-		assert_eq!(3*12, shape.points.len());
-		assert_eq!(4*11, shape.faces.len());
-		assert!(shape.is_valid());
+				Vec3::new(3., 1., 1.),
+				Vec3::new(0., 2., 1.),
+				];
+		{	// test simple faces (reference test)
+			let mut shape = Shape::new();
+			shape.junction_shortest(&line1, &line2, JunctionSimple::new());
+			assert_eq!(3*2, shape.points.len());
+			assert_eq!(4*1, shape.faces.len());
+		}
+		{	// test smooth faces
+			let mut shape = Shape::new();
+			shape.junction_shortest(&line1, &line2, JunctionSmooth::new(10));
+			assert_eq!(3*12, shape.points.len());
+			assert_eq!(4*11, shape.faces.len());
+			assert!(shape.is_valid());
+		}
 	}
 }

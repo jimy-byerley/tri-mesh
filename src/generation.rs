@@ -460,7 +460,7 @@ impl JunctionSmooth {
 		let end = shape.points[pts[1] as usize];
 		for i in 0 .. self.segments {
 			let f = ((i+1) as f64)/((self.segments+1) as f64);
-			shape.points.push((f*start + (1.-f) * end));
+			shape.points.push(f*start + (1.-f)*end);
 		}
 		startindex
 	}

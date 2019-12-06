@@ -1,6 +1,8 @@
 //! Defines a structure for fast triangle mesh generation
 
-use std::convert::Into;
+// use std::convert::Into;
+use std::convert::TryFrom;
+
 use std::iter::FromIterator;
 use std::collections::HashMap;
 use crate::mesh::Mesh;
@@ -16,34 +18,62 @@ type Vec2 = Vector2<f64>;
 #[derive(Debug, Default)]
 pub struct Shape {
 	/// buffer of points
-	pub points: Vec<Vec3>,		
+	points: Vec<Vec3>,		
 	/// triangle indices in the buffer of points
-	pub faces: Vec<[u32; 3]>,	
+	faces: Vec<[u32; 3]>,	
 }
 
 
-impl Into<Mesh> for Shape {
-	fn into(self) -> Mesh {
-		// TODO ideally we would do this:
-		// Mesh::new(&self.faces, &self.points)
-		// but the current Mesh new function is asking an owned storage, with splited vector and face components
-		let mut faces = Vec::with_capacity(self.faces.len()*3);
-		for face in self.faces {
-			faces.extend_from_slice(&face);
+impl TryFrom<&Shape> for Mesh {
+	type Error = &'static str;
+	fn try_from(shape: &Shape) -> Result<Mesh, Self::Error> {
+		if shape.is_envelope() {
+			let mut faces = Vec::with_capacity(shape.faces.len()*3);
+			for face in shape.faces.iter() {
+				faces.extend_from_slice(face);
+			}
+			let mut points = Vec::with_capacity(shape.points.len()*3);
+			for point in shape.points.iter() {
+				points.extend_from_slice(point.as_ref() as &[f64; 3]);
+			}
+			Ok(Mesh::new(&faces, &points))
 		}
-		let mut points = Vec::with_capacity(self.points.len()*3);
-		for point in self.points {
-			points.extend_from_slice((point.as_ref() as &[f64; 3]).as_ref());
-		}
-		Mesh::new(&faces, &points)
+		else {Err("this shape is not an envelope")}
 	}
 }
+impl TryFrom<&mut Shape> for Mesh {
+	type Error = &'static str;
+	fn try_from(shape: &mut Shape) -> Result<Mesh, Self::Error> { Mesh::try_from(shape as &Shape) }
+}
+impl TryFrom<Shape> for Mesh {
+	type Error = &'static str;
+	fn try_from(shape: Shape) -> Result<Mesh, Self::Error> { Mesh::try_from(&shape) }
+}
+
 
 impl Shape {
 	/// create with empty buffers.
 	pub fn new() -> Self {
 		Shape::default()
 	}
+	
+	/// create from buffers, return None if the buffers doesn't provide a valid mesh
+	pub fn from_buffers(points: Vec<Vec3>, faces: Vec<[u32;3]>) -> Option<Self> {
+		let mesh = Self::from_buffers_unsafe(points, faces);
+		if mesh.is_valid()	{Some(mesh)}
+		else				{None}
+	}
+	
+	/// create from buffers, without any check
+	pub fn from_buffers_unsafe(points: Vec<Vec3>, faces: Vec<[u32;3]>) -> Self {
+		Self {points: points, faces: faces}
+	}
+	
+	/// get a view on the internal points buffer
+	pub fn points<'a>(&'a self) -> &'a [Vec3] 		{&self.points}
+	/// get a view on the internal faces buffer
+	pub fn faces<'a>(&'a self) -> &'a [[u32;3]] 	{&self.faces}
+	
 	
 	/// return the extreme coordinates of the shape content.
 	///
@@ -329,7 +359,7 @@ impl Shape {
 						(face[2], face[0])].iter() {
 				// edge already used, or bad normal direction
 				if edges.contains_key(&edge) { return false; }
-				if let Some(mut used) = edges.get_mut(&(edge.1, edge.0)) {
+				if let Some(used) = edges.get_mut(&(edge.1, edge.0)) {
 					// edge already shared
 					if *used        { return false; }
 					*used = true;
@@ -362,6 +392,7 @@ fn base_from_points(points: &mut dyn Iterator<Item=Vec3>) -> (Vec3, Vec3, Vec3) 
 mod tests {
 	use super::*;
 	use std::f64::consts::PI;
+	use std::convert::TryInto;
 	
 	#[test]
 	fn test_triangulation() 
@@ -426,5 +457,17 @@ mod tests {
 		assert!(shape.is_envelope());
 		assert_eq!(shape.points.len(), 3*div);
 		assert_eq!(shape.faces.len(), 4*div);
+	}
+	
+	#[test]
+	fn test_into_mesh() {
+		let mesh: Mesh = Shape::new().triangulation(&vec![
+			Vec3::new(0., 0., 0.), 
+			Vec3::new(1., 0., 0.), 
+			Vec3::new(1., 1., 0.), 
+			Vec3::new(2., 1., 0.),
+			Vec3::new(0., 2., 0.),
+			]).try_into().unwrap();
+		mesh.is_valid().unwrap();
 	}
 }
